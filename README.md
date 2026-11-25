@@ -164,11 +164,29 @@ instead. Over adb:
 
 ```bash
 adb shell input keyevent KEYCODE_WAKEUP
-adb shell wm dismiss-keyguard          # only works for a swipe keyguard
-adb shell input swipe 540 1800 540 400 120
-adb shell input text "$PIN"           # PIN-only keyguard
+adb shell input keyevent 82            # MENU raises the PIN bouncer; without it
+                                       # `input text` has no focused field and is
+                                       # silently discarded
+adb shell input swipe 720 2600 720 900 200   # real resolution, not the 1080 default
+adb shell input text "$PIN"            # PIN-only keyguard
 adb shell input keyevent 66
 adb shell settings put system screen_off_timeout 2147483647   # keep it awake
+adb shell dumpsys window | grep mDreamingLockscreen          # want: false
+```
+
+Two traps while checking this remotely. `dumpsys window | grep mCurrentFocus`
+keeps reporting `NotificationShade` on the keyguard, so it cannot tell you
+whether the unlock worked — watch `mDreamingLockscreen` instead. And
+`adb exec-out screencap -p` returns an all-black frame while a secure keyguard
+is up (the surface is marked secure), so a black screenshot means "keyguard
+still showing", not "screen off" unless `dumpsys power` also says `Asleep`.
+
+After unlocking, keep the screen from timing out again — a re-lock re-arms the
+keyguard and fails the UI phase mid-run:
+
+```bash
+# on the phone, detached: poke the screen every 15s
+while :; do adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1; sleep 15; done
 ```
 
 ## Android kills large process trees
@@ -202,6 +220,20 @@ the failure: zero means everything was killed, rather than a step failing.
   updates (`./config.sh --disableupdate`) or re-run `scripts/setup.sh` after an
   update, otherwise the listener reverts to the glibc interpreter path and stops
   with `required file not found`.
+
+## Verified
+
+Both gates of a real Android/Termux project were run through a runner set up
+with exactly these steps, on a Blackview XPLORE 2 (aarch64, Android 15):
+
+| gate | runner label | run | result |
+|---|---|---|---|
+| Termux smoke build | `termux` | [45603965036](https://github.com/MBanucu/opencode-termux-setup/actions/runs/45603965036) | success, `BUILD SUCCESSFUL in 1m 18s`, `termux-smoke-apks` artifact |
+| full e2e on device | `android-arm64` | [45614207488](https://github.com/MBanucu/opencode-termux-setup/actions/runs/45614207488) | success in 3m 12s: instrumented UI suite, real install/uninstall (62 s / 34 s), pty and adb-endpoint tests all passed |
+
+The e2e gate is the interesting one: it does not just compile. It boots the
+app on the phone, drives it through instrumentation, and the device has to stay
+awake and unlocked for the whole UI phase (see above).
 
 ## Security
 
