@@ -153,6 +153,24 @@ JAVA_HOME=$PREFIX/lib/jvm/java-17-openjdk
 Edit it to match your SDK/JDK. Because jobs inherit Termux's `PATH`, `java`,
 `gradle`, `adb`, `python` and friends resolve to the Termux packages.
 
+## Device state for UI jobs
+
+An instrumented UI test needs the device awake, unlocked and unobstructed — a
+keyguard or an open notification shade sits above the activity and
+`bringToFront`-style assertions fail with the app apparently running. Note that
+`dumpsys user | grep State:` reporting `RUNNING_UNLOCKED` does *not* mean the
+keyguard is dismissed; check `dumpsys window | grep mDreamingLockscreen`
+instead. Over adb:
+
+```bash
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard          # only works for a swipe keyguard
+adb shell input swipe 540 1800 540 400 120
+adb shell input text "$PIN"           # PIN-only keyguard
+adb shell input keyevent 66
+adb shell settings put system screen_off_timeout 2147483647   # keep it awake
+```
+
 ## Limitations
 
 * **PRoot overhead.** Every syscall in the runner's process tree is traced.
@@ -187,4 +205,5 @@ queued rather than green.
 | `Permission to read the directory contents ... Access to the path '/' is denied` | listener started without `proot -r "$FAKE_ROOT"` |
 | `gradlew: /bin/sh: bad interpreter` | fake root lacks `bin/sh` |
 | runner goes offline after a while | wake lock released / battery optimisation; see Keeping it running |
+| UI tests fail in `bringToFront` while the app is visibly running | device locked or notification shade open; see Device state for UI jobs |
 | `Can not find 'ldd'` | running `config.sh`; use `scripts/register.sh` |
