@@ -171,6 +171,23 @@ adb shell input keyevent 66
 adb shell settings put system screen_off_timeout 2147483647   # keep it awake
 ```
 
+## Android kills large process trees
+
+Android 12+ kills the children an app spawns once the tree exceeds the phantom
+process limit (32 by default). A Gradle build plus instrumentation plus adb goes
+far past that, and the kill is silent: the listener and every child disappear,
+the job dies minutes in, and GitHub only reports *"The self-hosted runner lost
+communication with the server"*. Nothing is logged, because nothing got a chance
+to log. Disable the monitor once per device, over adb:
+
+```bash
+adb shell settings put global settings_enable_monitor_phantom_procs false
+adb shell settings get global settings_enable_monitor_phantom_procs   # false
+```
+
+If a job still vanishes, check `ps -A | grep -c proot` on the phone right after
+the failure: zero means everything was killed, rather than a step failing.
+
 ## Limitations
 
 * **PRoot overhead.** Every syscall in the runner's process tree is traced.
@@ -205,5 +222,6 @@ queued rather than green.
 | `Permission to read the directory contents ... Access to the path '/' is denied` | listener started without `proot -r "$FAKE_ROOT"` |
 | `gradlew: /bin/sh: bad interpreter` | fake root lacks `bin/sh` |
 | runner goes offline after a while | wake lock released / battery optimisation; see Keeping it running |
+| job dies minutes in, runner vanishes, nothing in the log | Android phantom-process killer; see Android kills large process trees |
 | UI tests fail in `bringToFront` while the app is visibly running | device locked or notification shade open; see Device state for UI jobs |
 | `Can not find 'ldd'` | running `config.sh`; use `scripts/register.sh` |
