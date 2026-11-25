@@ -181,6 +181,12 @@ whether the unlock worked — watch `mDreamingLockscreen` instead. And
 is up (the surface is marked secure), so a black screenshot means "keyguard
 still showing", not "screen off" unless `dumpsys power` also says `Asleep`.
 
+A workflow can do all of this itself, which is what unattended runs need: the
+consuming project's `e2e-arm64.yml` has a *Wake and unlock the device* step that
+reads the PIN from a `DEVICE_PIN` secret, fails loudly if `mDreamingLockscreen`
+is still `true`, and stops once the keyguard is down — so a `workflow_dispatch`
+no longer depends on somebody having picked the phone up.
+
 After unlocking, keep the screen from timing out again — a re-lock re-arms the
 keyguard and fails the UI phase mid-run:
 
